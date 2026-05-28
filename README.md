@@ -7,8 +7,9 @@
 ## Integrantes
 | Nombre | GitHub |
 |--------|--------|
-| Valentina Aristizábal Sierra | [@RawBud11](https://github.com/RawBud11) |
-| Camilo Andrés Jaime Rojas | — |
+| Valentina Aristizábal Sierra | [@RawBud11](https://github.com/RawBud11)          |
+| Camilo Andrés Jaime Rojas    | [@vasierra-hub](https://github.com/vasierra-hub)  | 
+
 
 ---
 
