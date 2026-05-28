@@ -4,8 +4,8 @@ Prof. Carlos Manuel Orrego Franco
 Generado: 2026-05-28
 
 Integrantes
-Nombre Apellido 1
-Nombre Apellido 2
+Camilo Jaime
+Valentina Aristizabal
 Dataset
 COVID-19 JHU (nuevos casos diarios)
 
