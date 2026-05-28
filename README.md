@@ -1,27 +1,27 @@
 # Neural ODEs sobre Datos Reales
 ### Análisis Numérico · Universidad Nacional de Colombia
-**Prof. Carlos Manuel Orrego Franco** · Entrega: 28 de mayo de 2026
+**Prof. Carlos Manuel Orrego Franco** · Entrega: 27 de mayo de 2026
 
 ---
 
 ## Integrantes
-| Nombre                       | GitHub                                   |
-|------------------------------|------------------------------------------|
+| Nombre | GitHub |
+|--------|--------|
 | Valentina Aristizábal Sierra | [@RawBud11](https://github.com/RawBud11) |
-| Camilo Andrés Jaime Rojas     |[@RawBud11](https://github.com/RawBud11) |
+| Camilo Andrés Jaime Rojas | — |
 
 ---
 
 ## Dataset
 **COVID-19 JHU** — Nuevos casos diarios por país (Johns Hopkins CSSE)
 
-| Característica   | Valor                        |
-|------------------|------------------------------|
-| Trayectorias     | 178 países                   |
-| Pasos de tiempo  | 400 días                     |
-| Dimensiones      | 1 (nuevos casos normalizados) |
-| Rango de valores | [−1.098, 7.928]    |
-| Split entrenamiento / prueba | 143 / 35  |
+| Característica | Valor |
+|---|---|
+| Trayectorias | 178 países |
+| Pasos de tiempo | 400 días |
+| Dimensiones | 1 (nuevos casos normalizados) |
+| Rango de valores | [−1.098, 7.928] |
+| Split entrenamiento / prueba | 143 / 35 |
 
 ---
 
