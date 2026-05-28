@@ -1,0 +1,436 @@
+\documentclass[12pt,a4paper]{article}
+
+% ─── Paquetes ───────────────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{setspace}
+\usepackage{parskip}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+\geometry{
+  top=2.5cm, bottom=2.5cm,
+  left=2.5cm, right=2.5cm
+}
+
+% ─── Encabezado y pie de página ─────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\small Análisis Numérico · UNAL}
+\lhead{\small Neural ODEs sobre Datos Reales}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ─── Colores ────────────────────────────────────────────────────────────────
+\definecolor{unal}{RGB}{0,60,120}
+\definecolor{lightgray}{RGB}{245,245,245}
+
+% ─── Títulos de secciones ───────────────────────────────────────────────────
+\titleformat{\section}
+  {\large\bfseries\color{unal}}
+  {\thesection.}{0.5em}{}[\titlerule]
+
+\titleformat{\subsection}
+  {\normalsize\bfseries\color{unal!80}}
+  {\thesubsection.}{0.5em}{}
+
+% ─── Hiperlinks ─────────────────────────────────────────────────────────────
+\hypersetup{
+  colorlinks=true,
+  linkcolor=unal,
+  urlcolor=unal,
+  citecolor=unal
+}
+
+% ────────────────────────────────────────────────────────────────────────────
+\begin{document}
+
+% ─── Portada ────────────────────────────────────────────────────────────────
+\begin{titlepage}
+  \centering
+  \vspace*{1cm}
+  {\Large\bfseries\color{unal} Universidad Nacional de Colombia\par}
+  \vspace{0.3cm}
+  {\large Análisis Numérico\par}
+  {\normalsize Prof.\ Carlos Manuel Orrego Franco\par}
+  \vspace{1.5cm}
+  \rule{\linewidth}{1.5pt}\\[0.4cm]
+  {\Huge\bfseries Neural ODEs sobre Datos Reales\par}
+  \vspace{0.3cm}
+  {\large COVID-19 JHU --- Nuevos casos diarios (178 países $\times$ 400 días)\par}
+  \rule{\linewidth}{1.5pt}
+  \vspace{1.5cm}
+
+  \begin{tabular}{ll}
+    \textbf{Integrante 1:} & Valentina Aristizábal Sierra \\[4pt]
+    \textbf{Integrante 2:} & Camilo Andrés Jaime Rojas \\[4pt]
+    \textbf{Entrega:}      & 27 de mayo de 2026 \\
+  \end{tabular}
+
+  \vfill
+  {\small Actividad Final --- Parejas}
+\end{titlepage}
+
+% ─── Tabla de contenidos ────────────────────────────────────────────────────
+\tableofcontents
+\newpage
+
+% ────────────────────────────────────────────────────────────────────────────
+\section{Descripción del dataset}
+\label{sec:dataset}
+
+El dataset utilizado proviene del repositorio COVID-19 del Center for Systems
+Science and Engineering (CSSE) de la Universidad Johns Hopkins (JHU), que
+consolidó diariamente casos confirmados a nivel mundial desde enero de 2020.
+Para este experimento se procesó la serie de nuevos casos diarios para 178
+países, abarcando 400 días consecutivos.
+La variable es unidimensional ($\text{dim}=1$), correspondiente a nuevos casos
+normalizados mediante transformación logarítmica suavizada, con rango efectivo
+$[-1.098,\;7.928]$.
+El conjunto se dividió en 143 trayectorias de entrenamiento y 35 de prueba.
+
+Desde el punto de vista dinámico, las series de COVID-19 exhiben el comportamiento
+oscilatorio y no lineal que motiva el uso de EDOs para su modelamiento.
+Al igual que el modelo SIR estudiado en los notebooks NB03--NB04 del curso
+($dI/dt = \beta S I - \gamma I$), la dinámica de contagio presenta crecimiento
+exponencial inicial, un pico y una caída.
+Sin embargo, a diferencia del SIR clásico, las trayectorias reales muestran
+múltiples oleadas, efectos de política pública (confinamientos, vacunación)
+y heterogeneidades profundas entre países --- factores no observables en la
+serie de casos, como se aprecia en la Figura~\ref{fig:exploracion}.
+
+Esta variabilidad representa el principal desafío del dataset: países con
+dinámicas muy distintas (olas rápidas y agudas versus comportamientos prolongados
+multi-pico) coexisten en el mismo conjunto.
+El muestreo es formalmente regular (400 pasos igualmente espaciados), pero el
+ruido inherente a los reportes epidemiológicos (subregistro, cambios en criterios
+diagnósticos, retardo en notificación) introduce una irregularidad implícita que
+pone a prueba la capacidad de los modelos de aprender señal sobre ruido.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{fig_01_exploracion.png}
+  \caption{Exploración del dataset: 8 trayectorias de países representativos
+    (nuevos casos diarios normalizados). Se observa la diversidad de patrones ---
+    olas únicas pronunciadas, picos múltiples y señales planas --- que refleja
+    la heterogeneidad epidemiológica global.}
+  \label{fig:exploracion}
+\end{figure}
+
+% ────────────────────────────────────────────────────────────────────────────
+\section{Hiperparámetros elegidos y justificación}
+\label{sec:hiperparametros}
+
+Se ejecutaron dos configuraciones para explorar el efecto del tamaño del modelo.
+La \textbf{Configuración A} ($\texttt{dim\_latente}=8$) apuesta por mayor
+capacidad representacional: el vector $z_0$ puede codificar simultáneamente
+información sobre la fase de la ola, la tasa de crecimiento y la
+heterogeneidad entre países.
+La \textbf{Configuración B} ($\texttt{dim\_latente}=4$) opera con la premisa
+de que un espacio latente más pequeño funciona como regularizador implícito,
+forzando al modelo a aprender solo las componentes más explicativas de la
+dinámica --- relevante dado el alto nivel de ruido del dataset.
+
+\begin{table}[H]
+  \centering
+  \caption{Hiperparámetros de ambas configuraciones y justificación.}
+  \label{tab:hiperparametros}
+  \small
+  \begin{tabularx}{\linewidth}{lccX}
+    \toprule
+    \textbf{Hiperparámetro} & \textbf{Config A} & \textbf{Config B} & \textbf{Justificación} \\
+    \midrule
+    \texttt{dim\_latente}    & 8    & 4    & Dimensión de $z_0$. Config A captura más modos de variabilidad; Config B regulariza para datos ruidosos. \\[4pt]
+    \texttt{n\_pasos\_ode}   & 10   & 6    & Pasos RK4. Más pasos $\Rightarrow$ mayor precisión numérica pero mayor costo $\mathcal{O}(n)$. \\[4pt]
+    \texttt{learning\_rate}  & 0.001 & 0.001 & Tasa Adam estándar para Neural ODEs \cite{chen2018}. Tasas mayores producen inestabilidades en el solver RK4. \\[4pt]
+    \texttt{n\_epochs}       & 35   & 35   & La función de costo se estabilizó $\approx$ época 30 en ambas configs (ver Figura~\ref{fig:curvas}). \\[4pt]
+    \texttt{batch\_size}     & 32   & 32   & Balance entre varianza del gradiente y memoria de GPU. Estándar en la literatura. \\[4pt]
+    \texttt{dim\_oculto\_f}  & 48   & 32   & Capacidad de $f_\theta$. Proporcional a \texttt{dim\_latente} para mantener expresividad. \\[4pt]
+    \texttt{dim\_oculto\_enc}& 32   & 24   & Unidades del encoder RNN inverso. Coherente con $z_0$. \\[4pt]
+    \texttt{dim\_oculto\_dec}& 48   & 32   & Capacidad del decoder; $\geq$ \texttt{dim\_oculto\_f} para reconstrucción fiel. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+% ────────────────────────────────────────────────────────────────────────────
+\section{Tabla de resultados (RMSE)}
+\label{sec:resultados}
+
+Las tablas siguientes reportan el RMSE de reconstrucción (\emph{rec}) y
+extrapolación (\emph{ext}) para cada modelo y fracción de observaciones,
+replicando el esquema experimental de la Tabla~2 de \citet{rubanova2019}.
+El valor ``---'' en extrapolación al 100\% es esperado: con todos los puntos
+observados no quedan puntos futuros para evaluar.
+
+\begin{table}[H]
+  \centering
+  \caption{Configuración A: \texttt{dim\_latente}$=8$, \texttt{n\_pasos\_ode}$=10$,
+           \texttt{dim\_oculto\_f}$=48$.}
+  \label{tab:config_a}
+  \begin{tabular}{lcccccc}
+    \toprule
+    \multirow{2}{*}{\textbf{Modelo}}
+      & \multicolumn{2}{c}{\textbf{30\% obs}}
+      & \multicolumn{2}{c}{\textbf{60\% obs}}
+      & \textbf{100\% obs}
+      & \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-6}
+      & rec & ext & rec & ext & rec & \textbf{Paráms} \\
+    \midrule
+    Método Clásico (splines) & 0.000 & 0.114 & 0.000 & 0.087 & 0.000 & 4 \\
+    Neural ODE               & 0.500 & 0.501 & 0.498 & 0.505 & 0.501 & 3\,721 \\
+    Latent ODE               & 0.576 & 0.576 & 0.573 & 0.579 & 0.576 & 7\,593 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[H]
+  \centering
+  \caption{Configuración B: \texttt{dim\_latente}$=4$, \texttt{n\_pasos\_ode}$=6$,
+           \texttt{dim\_oculto\_f}$=32$.}
+  \label{tab:config_b}
+  \begin{tabular}{lcccccc}
+    \toprule
+    \multirow{2}{*}{\textbf{Modelo}}
+      & \multicolumn{2}{c}{\textbf{30\% obs}}
+      & \multicolumn{2}{c}{\textbf{60\% obs}}
+      & \textbf{100\% obs}
+      & \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-6}
+      & rec & ext & rec & ext & rec & \textbf{Paráms} \\
+    \midrule
+    Método Clásico (splines) & 0.000 & 0.114 & 0.000 & 0.087 & 0.000 & 4 \\
+    Neural ODE               & 0.503 & 0.504 & 0.501 & 0.508 & 0.504 & 1\,581 \\
+    Latent ODE               & 0.561 & 0.561 & 0.559 & 0.565 & 0.561 & 3\,717 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+El Método Clásico (splines) logra RMSE de reconstrucción exactamente 0.000 en todos
+los casos --- los splines interpolantes pasan exactamente por los puntos observados.
+Sin embargo, su RMSE de extrapolación es considerablemente más alto
+($\approx 0.114$ con 30\% de observaciones).
+La Neural ODE mantiene un comportamiento consistente entre reconstrucción y
+extrapolación ($\sim$0.50), lo que indica que no memoriza sino que aprende una
+dinámica general.
+El Latent ODE presenta valores ligeramente superiores a la Neural ODE en ambas
+configuraciones.
+
+% ────────────────────────────────────────────────────────────────────────────
+\section{Figuras}
+\label{sec:figuras}
+
+\subsection{Comparación de modelos (60\% de observaciones)}
+
+\begin{figure}[H]
+  \centering
+  % \includegraphics[width=\linewidth]{figuras/fig2_comparacion.png}
+  \includegraphics[width=\linewidth]{fig_02_comparacion.png}
+  \caption{Comparación de los tres modelos con 60\% de observaciones en
+    3 trayectorias de prueba.
+    Los puntos son las observaciones disponibles, la línea discontinua es la
+    predicción y la línea sólida gris es la trayectoria real.
+    Fila superior: Método Clásico (splines).
+    Fila media: Neural ODE.
+    Fila inferior: Latent ODE.}
+  \label{fig:comparacion}
+\end{figure}
+
+\subsection{Curvas de aprendizaje}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\linewidth]{fig_03_curvas.png}
+  \caption{Curvas de aprendizaje para Neural ODE (verde) y Latent ODE (azul)
+    durante 35 épocas.
+    La Neural ODE converge de forma más suave ($\text{loss}_0\approx 0.35$);
+    el Latent ODE muestra una caída inicial pronunciada desde
+    $\text{loss}_0\approx 0.55$ seguida de estabilización $\approx$ época~30.}
+  \label{fig:curvas}
+\end{figure}
+
+% ────────────────────────────────────────────────────────────────────────────
+\section{Respuestas a las preguntas de análisis}
+\label{sec:preguntas}
+
+\subsection{P1 — ¿Con qué porcentaje de observaciones empieza a ganar la
+  Neural ODE o el Latent ODE?}
+\label{sec:p1}
+
+Con base en los resultados obtenidos (Tablas~\ref{tab:config_a}
+y~\ref{tab:config_b}), la Neural ODE \textbf{no supera al Método Clásico en
+extrapolación} en ninguna de las fracciones evaluadas (30\%, 60\%, 100\%) para
+este dataset.
+Con 30\% de observaciones, el Método Clásico registra RMSE de extrapolación de
+0.114 frente a $\sim$0.501--0.504 de la Neural ODE.
+Con 60\%, el clásico mejora a 0.087 mientras la Neural ODE se mantiene
+alrededor de 0.505--0.508.
+
+Este resultado es coherente con lo trabajado en los NB06--07.
+Los splines cúbicos son interpoladores exactos y, para series epidémicas con
+continuidad local, su extrapolación a corto plazo puede ser precisa.
+La Neural ODE aprende una dinámica \emph{promedio} sobre 143 países de
+entrenamiento y, al predecir en los 35 países de prueba, esa dinámica
+generalizada puede no coincidir con el régimen local de cada país.
+En otras palabras, el modelo clásico tiene la ventaja de ajustarse
+específicamente a cada trayectoria, mientras la Neural ODE generaliza desde el
+entrenamiento; en datasets con dinámica muy heterogénea entre trayectorias
+(como COVID-19 global), esa generalización penaliza el rendimiento individual.
+La ventaja de la Neural ODE se manifestaría con más épocas, mayor capacidad, o
+en datasets donde la dinámica compartida entre trayectorias es más fuerte
+(como el SIR sintético de la Opción A).
+
+\subsection{P2 — ¿Por qué el encoder RNN corre en orden inverso al tiempo?}
+\label{sec:p2}
+
+Esta es una de las decisiones de diseño más elegantes del Latent ODE
+\cite{rubanova2019}.
+El encoder RNN procesa la secuencia $\{x_T, x_{T-1}, \ldots, x_1\}$ de atrás
+hacia adelante para poder computar el estado inicial $z_0$ en el tiempo $t_0$
+como el estado final del procesamiento.
+La lógica es directa: el Latent ODE modela la trayectoria como la solución de
+una EDO integrada desde $z_0$ hacia adelante en el tiempo.
+Para inferir $z_0$, el encoder necesita condensar toda la información observada
+en un vector de condición inicial, y $t_0$ es el punto más antiguo de la
+secuencia.
+
+Si el encoder corriese en orden cronológico normal, su estado oculto al
+finalizar correspondería al tiempo más reciente ($t_T$), no al más antiguo ---
+lo que haría incoherente la integración hacia adelante desde $t_0$.
+Además, por el fenómeno de \emph{olvido selectivo} del RNN (estudiado en NB05),
+el estado final estaría dominado por las observaciones más recientes, perdiendo
+información sobre las condiciones iniciales de la dinámica.
+En COVID-19, esto significaría que $z_0$ reflejaría el estado actual de la ola
+pero olvidaría la pendiente inicial de crecimiento --- precisamente la
+información necesaria para integrar la EDO desde el inicio.
+
+\subsection{P3 — ¿Hubo algún resultado sorpresivo?}
+\label{sec:p3}
+
+El resultado más llamativo es que el \textbf{Latent ODE no supera a la Neural
+ODE} sino que obtiene RMSE consistentemente más alto en todas las condiciones
+($\sim$0.576 vs.\ $\sim$0.501 en Config~A; $\sim$0.561 vs.\ $\sim$0.503 en
+Config~B).
+Intuitivamente se esperaría lo contrario: el Latent ODE es un modelo más
+sofisticado con encoder RNN y espacio latente probabilístico, diseñado para
+capturar la heterogeneidad entre trayectorias y producir predicciones
+personalizadas.
+
+Hay varias razones que explican este resultado:
+\begin{enumerate}
+  \item La curva de aprendizaje (Figura~\ref{fig:curvas}) muestra que el Latent
+    ODE parte de una pérdida inicial considerablemente más alta
+    ($\sim$0.55 vs.\ $\sim$0.35), lo que con solo 35 épocas resulta en
+    convergencia más lenta e incompleta.
+  \item El dataset COVID-19 tiene una única dimensión y muestreo regular, lo
+    que reduce la ventaja del encoder RNN inverso: al no haber irregularidad
+    temporal real, la información que el encoder debe condensar es más simple
+    y la Neural ODE puede aproximarla adecuadamente.
+  \item El ruido epidemiológico dificulta que el encoder aprenda un $z_0$
+    representativo, degradando toda la integración subsecuente.
+\end{enumerate}
+
+Este resultado es consistente con \citet{rubanova2019}: la ventaja del Latent
+ODE se manifiesta principalmente con muestreo genuinamente irregular y variables
+multidimensionales, como en PhysioNet.
+
+\subsection{P4 — ¿En qué tipo de problema NO recomendaríamos una Neural ODE?}
+\label{sec:p4}
+
+Con base en los resultados de este experimento, identificamos tres escenarios en
+los que una Neural ODE no es la herramienta adecuada:
+
+\begin{enumerate}
+  \item \textbf{Cuando los datos son ruidosos y la interpolación exacta es
+    suficiente.}
+    El Método Clásico obtuvo RMSE de reconstrucción exactamente 0 en todos los
+    casos frente al $\sim$0.50 de la Neural ODE, siendo prácticamente instantáneo
+    (0.0~s vs.\ 2\,473~s).
+    Si el objetivo es rellenar valores faltantes en una serie donde los puntos
+    observados son confiables, los splines son superiores sin ningún costo
+    computacional.
+
+  \item \textbf{Cuando el presupuesto computacional es limitado.}
+    Con 143 trayectorias de entrenamiento, la Neural ODE requirió
+    $\sim$41~minutos y el Latent ODE $\sim$54~minutos en Colab.
+    En un contexto de epidemiología operativa donde se necesitan actualizaciones
+    diarias, este costo es inviable.
+    El número de parámetros (3\,721--7\,593) relativamente alto respecto al
+    tamaño del dataset también puede inducir sobreajuste sin regularización
+    explícita.
+
+  \item \textbf{Cuando la dinámica entre trayectorias es extremadamente
+    heterogénea sin un campo vectorial $f_\theta$ común.}
+    En COVID-19 global, las diferencias entre países responden a factores
+    externos no observables en la serie de casos.
+    Una Neural ODE que aprende una $f_\theta$ compartida promedia estas
+    diferencias.
+    En este caso, métodos que ajustan parámetros por trayectoria (como el SIR
+    con \texttt{scipy.optimize}) pueden ser más precisos porque se especializan
+    en cada contexto individual.
+\end{enumerate}
+
+% ────────────────────────────────────────────────────────────────────────────
+\section{Conclusiones}
+\label{sec:conclusiones}
+
+Esta actividad permitió materializar el recorrido completo desde la teoría de
+EDOs hasta la aplicación de Neural ODEs y Latent ODEs sobre datos
+epidemiológicos reales.
+Los resultados muestran que, en el dataset COVID-19 con muestreo regular y una
+sola dimensión, el método clásico con splines sigue siendo competitivo en
+extrapolación a corto plazo, mientras que la Neural ODE logra una dinámica más
+robusta y consistente entre reconstrucción y extrapolación, sin memorizar.
+
+El Latent ODE, a pesar de su mayor sofisticación, no superó a la Neural ODE
+aquí --- probablemente por convergencia más lenta con pocas épocas y por la
+ausencia de irregularidad temporal real, que es precisamente el escenario en
+que brilla según \citet{rubanova2019}.
+
+La comparación de dos configuraciones confirmó que reducir el espacio latente
+(Config~B) ofrece un compromiso razonable: resultados casi equivalentes con la
+mitad de parámetros y menor tiempo de entrenamiento.
+En síntesis, las Neural ODEs son herramientas poderosas cuando la dinámica es
+genuinamente compartida entre trayectorias y el muestreo es irregular ---
+condiciones que posicionan al Latent ODE como el enfoque de referencia para
+series fisiológicas multivariadas como las del dataset PhysioNet, el escenario
+canónico del paper de \citet{rubanova2019}.
+
+% ────────────────────────────────────────────────────────────────────────────
+\section*{Referencias}
+\addcontentsline{toc}{section}{Referencias}
+
+\begin{thebibliography}{9}
+
+\bibitem{chen2018}
+  Chen, R.~T.~Q., Rubanova, Y., Bettencourt, J., \& Duvenaud, D. (2018).
+  Neural Ordinary Differential Equations.
+  \textit{Advances in Neural Information Processing Systems (NeurIPS)}, 31.
+
+\bibitem{rubanova2019}
+  Rubanova, Y., Chen, R.~T.~Q., \& Duvenaud, D. (2019).
+  Latent ODEs for Irregularly-Sampled Time Series.
+  \textit{Advances in Neural Information Processing Systems (NeurIPS)}, 32.
+
+\bibitem{dong2020}
+  Dong, E., Du, H., \& Gardner, L. (2020).
+  An interactive web-based dashboard to track COVID-19 in real time.
+  \textit{The Lancet Infectious Diseases}, 20(5), 533--534.
+
+\end{thebibliography}
+
+\end{document}
